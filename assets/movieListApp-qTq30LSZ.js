@@ -218,121 +218,163 @@ const showError = () => {
 };
 const renderModalContent = (data, myRating) => {
   if (!$modalContainer) return;
-  const year = data.release_date ? data.release_date.split("-")[0] : "연도가 없습니다!";
-  const genres = data.genres ? data.genres.map((genre) => genre.name).join(", ") : "장르가 없습니다!";
-  const posterUrl = data.poster_path ? `https://image.tmdb.org/t/p/original${data.poster_path}` : "./images/woowacourse_logo.png";
-  const ratingText = myRating > 0 ? RATING_MESSAGES[myRating] : "평가해주세요";
-  const starsHTML = [2, 4, 6, 8, 10].map((score) => {
-    const imgSrc = score <= myRating ? "./images/star_filled.png" : "./images/star_empty.png";
-    return `<img src="${imgSrc}" class="rate-star-img" data-score="${score}" alt="${score}점" />`;
-  }).join("");
+  const year = formatYear(data.release_date);
+  const genres = formatGenres(data.genres);
+  const posterUrl = getPosterUrl(data.poster_path);
+  const ratingText = getRatingText(myRating);
+  const starsHTML = generateStarsHTML(myRating);
   $modalContainer.innerHTML = /* html */
   `
-    <div class="modal-image">
-      <img src="${posterUrl}" alt="${data.title}" />
-    </div>
+    ${createPosterHTML(posterUrl, data.title)}
     <div class="modal-description">
-      <h2>${data.title}</h2>
-      <p class="category">${year} · ${genres}</p>
-      <p class="rate">
-        <span class="average-text">평균</span>
-        <img src="./images/star_filled.png" class="average-star" />
-        <span>${data.vote_average.toFixed(1)}</span>
-      </p>
-      <hr />
-
-      <div class="my-rating-container">
-        <h3>내 별점</h3>
-        <div class="star-rating" id="starRating">
-          <div class="stars-wrapper">
-            ${starsHTML}
-          </div>
-          <span class="rating-desc" id="ratingDescription">
-          ${ratingText} 
-          ${myRating > 0 ? `<span class="score-number">(${myRating}/10)</span>` : ""}
-          </span
-        </div>
-      </div>
-      <hr />
-
-      <div class="plot-container">
-        <h3>줄거리</h3>
-        <p class="detail">${data.overview || "줄거리 정보가 없습니다."}</p>
-      </div>
+      ${createMovieHeaderHTML(data.title, year, genres, data.vote_average)}
+      ${createMyRatingHTML(starsHTML, ratingText, myRating)}
+      ${createPlotHTML(data.overview)}
     </div>
   `;
 };
+const formatYear = (date) => date ? date.split("-")[0] : "연도가 없습니다!";
+const formatGenres = (genres) => genres ? genres.map((genre) => genre.name).join(", ") : "장르가 없습니다!";
+const getPosterUrl = (path) => path ? `https://image.tmdb.org/t/p/original${path}` : "./images/woowacourse_logo.png";
+const getRatingText = (rating) => rating > 0 ? RATING_MESSAGES[rating] : "평가해주세요";
+const generateStarsHTML = (myRating) => {
+  return [2, 4, 6, 8, 10].map((score) => {
+    const imgSrc = score <= myRating ? "./images/star_filled.png" : "./images/star_empty.png";
+    return `<img src="${imgSrc}" class="rate-star-img" data-score="${score}" alt="${score}점" />`;
+  }).join("");
+};
+const createPosterHTML = (posterUrl, title) => (
+  /* html */
+  `
+  <div class="modal-image">
+    <img src="${posterUrl}" alt="${title}" />
+  </div>
+`
+);
+const createMovieHeaderHTML = (title, year, genres, voteAverage) => (
+  /* html */
+  `
+  <h2>${title}</h2>
+  <p class="category">${year} · ${genres}</p>
+  <p class="rate">
+    <span class="average-text">평균</span>
+    <img src="./images/star_filled.png" class="average-star" />
+    <span>${voteAverage.toFixed(1)}</span>
+  </p>
+  <hr />
+`
+);
+const createMyRatingHTML = (starsHTML, ratingText, myRating) => (
+  /* html */
+  `
+  <div class="my-rating-container">
+    <h3>내 별점</h3>
+    <div class="star-rating" id="starRating">
+      <div class="stars-wrapper">
+        ${starsHTML}
+      </div>
+      <span class="rating-desc" id="ratingDescription">
+        ${ratingText} 
+        ${myRating > 0 ? `<span class="score-number">(${myRating}/10)</span>` : ""}
+      </span>
+    </div>
+  </div>
+  <hr />
+`
+);
+const createPlotHTML = (overview) => (
+  /* html */
+  `
+  <div class="plot-container">
+    <h3>줄거리</h3>
+    <p class="detail">${overview || "줄거리 정보가 없습니다."}</p>
+  </div>
+`
+);
 const updateStarsUI = (score) => {
+  updateStarImages(score);
+  updateRatingText(score);
+};
+const updateStarImages = (score) => {
   const $stars = document.querySelectorAll(".rate-star-img");
-  const $description = document.querySelector("#ratingDescription");
   $stars.forEach(($star) => {
     const starScore = Number($star.dataset.score);
     const imgElement = $star;
     imgElement.src = starScore <= score ? "./images/star_filled.png" : "./images/star_empty.png";
   });
-  if ($description) {
-    if (score > 0) {
-      $description.innerHTML = `${RATING_MESSAGES[score]} <span class="score-number">(${score}/10)</span>`;
-    } else {
-      $description.innerHTML = "평가해주세요";
-    }
+};
+const updateRatingText = (score) => {
+  const $description = document.querySelector("#ratingDescription");
+  if (!$description) return;
+  if (score > 0) {
+    $description.innerHTML = `${RATING_MESSAGES[score]} <span class="score-number">(${score}/10)</span>`;
+  } else {
+    $description.innerHTML = "평가해주세요";
   }
+};
+const modalState = {
+  movieId: 0,
+  savedRating: 0
 };
 const openModal = async (movieId) => {
   openModalUI();
   showModalSkeleton();
   try {
     const data = await fetchMovieDetail(movieId);
-    const myRating = await reviewStorage.getRating(movieId) || 0;
-    renderModalContent(data, myRating);
-    initStarRatingEvents(movieId, myRating);
+    modalState.movieId = movieId;
+    modalState.savedRating = await reviewStorage.getRating(movieId) || 0;
+    renderModalContent(data, modalState.savedRating);
   } catch (error) {
     showError();
   }
 };
-const initStarRatingEvents = (movieId, savedRating) => {
-  const $starContainer = document.querySelector("#starRating");
-  let currentSavedRating = savedRating;
-  $starContainer?.addEventListener("mouseover", (e) => {
-    const target = e.target;
-    if (target.classList.contains("rate-star-img")) {
-      const hoverScore = Number(target.dataset.score);
-      updateStarsUI(hoverScore);
-    }
-  });
-  $starContainer?.addEventListener("mouseout", () => {
-    updateStarsUI(currentSavedRating);
-  });
-  $starContainer?.addEventListener("click", async (e) => {
-    const target = e.target;
-    if (target.classList.contains("rate-star-img")) {
-      const clickedScore = Number(target.dataset.score);
-      currentSavedRating = clickedScore;
-      updateStarsUI(clickedScore);
-      await reviewStorage.saveRating(movieId, clickedScore);
-    }
-  });
+const handleStarHover = (e) => {
+  const target = e.target;
+  if (target.classList.contains("rate-star-img")) {
+    const hoverScore = Number(target.dataset.score);
+    updateStarsUI(hoverScore);
+  }
 };
-const initModalCloseEvents = () => {
+const handleStarLeave = (e) => {
+  const target = e.target;
+  const relatedTarget = e.relatedTarget;
+  if (target.closest(".star-rating") && !relatedTarget?.closest(".star-rating")) {
+    updateStarsUI(modalState.savedRating);
+  }
+};
+const handleStarClick = async (e) => {
+  const target = e.target;
+  if (target.classList.contains("rate-star-img")) {
+    const clickedScore = Number(target.dataset.score);
+    modalState.savedRating = clickedScore;
+    updateStarsUI(clickedScore);
+    await reviewStorage.saveRating(modalState.movieId, clickedScore);
+  }
+};
+const initModalEvents = () => {
   const $closeModalButton = document.querySelector("#closeModal");
   const $modalBackground2 = document.querySelector("#modalBackground");
-  if ($closeModalButton) {
-    $closeModalButton.addEventListener("click", closeModalUI);
-  }
-  if ($modalBackground2) {
-    $modalBackground2.addEventListener("click", (event) => {
-      if (event.target === $modalBackground2) {
-        closeModalUI();
-      }
-    });
-  }
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && $modalBackground2?.classList.contains("active")) {
-      closeModalUI();
-    }
-  });
+  const $modalContainer2 = document.querySelector("#modalContainer");
+  $closeModalButton?.addEventListener("click", handleCloseModal);
+  $modalBackground2?.addEventListener("click", handleBackgroundClick);
+  document.addEventListener("keydown", handleEscapeKey);
+  $modalContainer2?.addEventListener("mouseover", handleStarHover);
+  $modalContainer2?.addEventListener("mouseout", handleStarLeave);
+  $modalContainer2?.addEventListener("click", handleStarClick);
 };
-initModalCloseEvents();
+const handleCloseModal = () => closeModalUI();
+const handleBackgroundClick = (e) => {
+  if (e.target === document.querySelector("#modalBackground")) {
+    closeModalUI();
+  }
+};
+const handleEscapeKey = (e) => {
+  const isModalActive = document.querySelector("#modalBackground")?.classList.contains("active");
+  if (e.key === "Escape" && isModalActive) {
+    closeModalUI();
+  }
+};
+initModalEvents();
 const initMovieList = (query) => {
   let currentPage = 1;
   let isFetching = false;
@@ -384,18 +426,11 @@ const initMovieList = (query) => {
     isFetching = true;
     await loadMovies();
     isFetching = false;
+    $heroDetailBtn?.addEventListener("click", handleHeroClick);
+    $thumbnailList.addEventListener("click", handleMovieItemClick);
     observer.observe($button);
   };
   start();
-  if ($heroDetailBtn) {
-    $heroDetailBtn.addEventListener("click", (event) => {
-      const target = event.currentTarget;
-      const movieId = Number(target.dataset.id);
-      if (movieId) {
-        openModal(movieId);
-      }
-    });
-  }
   $button?.addEventListener("click", async () => {
     isError = false;
     hideMoreButton();
@@ -405,16 +440,21 @@ const initMovieList = (query) => {
       isFetching = false;
     }
   });
-  $thumbnailList.addEventListener("click", (event) => {
-    const target = event.target;
-    const $movieItem = target.closest(".movie-item");
-    if ($movieItem) {
-      const movieId = Number($movieItem.dataset.id);
-      if (movieId) {
-        openModal(movieId);
-      }
+};
+const handleHeroClick = (event) => {
+  const target = event.currentTarget;
+  const movieId = Number(target.dataset.id);
+  if (movieId) openModal(movieId);
+};
+const handleMovieItemClick = (event) => {
+  const target = event.target;
+  const $movieItem = target.closest(".movie-item");
+  if ($movieItem) {
+    const movieId = Number($movieItem.dataset.id);
+    if (movieId) {
+      openModal(movieId);
     }
-  });
+  }
 };
 export {
   initMovieList as i
